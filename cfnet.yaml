@@ -1,0 +1,48 @@
+# CFNet (AGPL-3.0 license)
+nc: 2  # Number of classes (bud=0, flower=1)
+scales: custom  # Custom scale 
+depth_multiple: 0.4  
+width_multiple: 0.3  
+max_channels: 512
+
+# Backbone 
+backbone:
+  - [-1, 1, Conv, [72, 3, 2]]  # 0-P1/2: Wider initial conv for detail capture (vs. 64 in YOLOv10n)
+  - [-1, 1, Conv, [144, 3, 2]]  # 1-P2/4: Increased channels
+  - [-1, 4, C2f, [144, True]]  # 2: More repeats (4 vs. 3) for fine features
+  - [-1, 1, SCDown, [288, 3, 2]]  # 3-P3/8: SCDown with adjusted channels
+  - [-1, 7, C2f, [288, True]]  # 4: Increased repeats (7 vs. 6) for mid-level details
+  - [-1, 1, PSA, [288]]  # 5: Early PSA for global plant context (added uniquely here)
+  - [-1, 1, SCDown, [512, 3, 2]]  # 6-P4/16: SCDown
+  - [-1, 7, C2f, [512, True]]  # 7: More repeats for robustness
+  - [-1, 1, SCDown, [512, 3, 2]]  # 8-P5/32: SCDown (capped channels)
+  - [-1, 4, C2f, [512, True]]  # 9: Increased repeats (4 vs. 3)
+  - [-1, 1, SPPF, [512, 7]]  # 10: Larger SPPF kernel (7 vs. 5) for better scale handling
+  - [-1, 1, PSA, [512]]  # 11: Second PSA (unique addition for enhanced attention)
+
+# Neck 
+neck:
+  - [-1, 1, nn.Upsample, [None, 2, 'nearest']]  # 12: Upsample
+  - [[-1, 7], 1, Concat, [1]]  # 13: Concat with backbone layer 7 (P4, adjusted from 6)
+  - [-1, 2, C2f, [512, False]]  # 14: Fewer repeats (2 vs. 3) for speed
+  - [-1, 1, nn.Upsample, [None, 2, 'nearest']]  # 15: Upsample
+  - [[-1, 4], 1, Concat, [1]]  # 16: Concat with backbone layer 4 (P3)
+  - [-1, 2, C2f, [288, False]]  # 17: Fewer repeats, adjusted channels - P3/8 output
+  - [-1, 1, SCDown, [288, 3, 2]]  # 18: SCDown
+  - [[-1, 14], 1, Concat, [1]]  # 19: Extra concat (unique for better fusion)
+  - [-1, 2, C2f, [512, False]]  # 20: Fewer repeats - P4/16 output
+  - [-1, 1, SCDown, [512, 3, 2]]  # 21: SCDown
+  - [[-1, 11], 1, Concat, [1]]  # 22: Concat with backbone layer 11 (P5, adjusted)
+  - [-1, 2, C2f, [512, False]]  # 23: Fewer repeats - P5/32 output
+
+# Head
+head:
+  - [[17, 20, 23], 1, v10Detect, [nc]]  # 24: v10Detect on adjusted P3, P4, P5 (with DWConv for efficiency)
+
+# Notes on Modules (Same as YOLOv10, but Tuned)
+# Conv: Conv + BN + SiLU
+# C2f: CSP bottleneck with 2 convs, tuned repeats for small objects
+# SCDown: Spatial-channel decoupled downsample
+# SPPF: Spatial pyramid pooling-fast, with larger kernel for plants
+# PSA: Partial self-attention, duplicated for uniqueness
+# v10Detect: Dual head (one-to-many training, one-to-one inference), scaled for nc=2
