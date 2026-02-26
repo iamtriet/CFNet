@@ -1,1 +1,1 @@
-**CFNet: Advancing Automated Pollination with YOLOv8-Based Cantaloupe Floral Detection
+**CFNet: Advancing Automated Pollination with YOLOv8-Based Cantaloupe Floral Detection**
